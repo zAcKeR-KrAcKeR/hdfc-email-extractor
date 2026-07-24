@@ -30,9 +30,14 @@ from email.mime.text import MIMEText
 from email.header import decode_header
 
 import pdfplumber
-import pytesseract
-from pdf2image import convert_from_bytes
-from PIL import Image
+
+try:
+    import pytesseract
+    from pdf2image import convert_from_bytes
+    from PIL import Image
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -185,12 +190,16 @@ def get_text_from_pdf(file_bytes: bytes) -> str:
     if len(text) > 20:
         return text  # real text layer — fast and exact
 
-    # Scanned / image-only PDF — rasterize and OCR
+    # Scanned / image-only PDF — needs Tesseract
+    if not OCR_AVAILABLE:
+        return "[scanned PDF — OCR not available on this server]"
     images = convert_from_bytes(file_bytes)
     return "\n".join(pytesseract.image_to_string(img) for img in images)
 
 
 def get_text_from_image(file_bytes: bytes) -> str:
+    if not OCR_AVAILABLE:
+        return "[image attachment — OCR not available on this server]"
     img = Image.open(io.BytesIO(file_bytes))
     return pytesseract.image_to_string(img)
 
