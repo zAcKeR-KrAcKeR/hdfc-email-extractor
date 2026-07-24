@@ -24,53 +24,291 @@ DASHBOARD_HTML = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Email Extractor Dashboard</title>
+<title>Email Data Extractor</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
-  h1   { color: #1a1a2e; }
-  .btn { background:#0f3460; color:#fff; border:none; padding:10px 22px;
-         border-radius:6px; cursor:pointer; font-size:15px; }
-  .btn:hover { background:#16213e; }
-  table { width:100%; border-collapse:collapse; margin-top:24px; }
-  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid #e0e0e0; }
-  th    { background:#f5f5f5; }
-  .replied  { color: #2e7d32; font-weight:600; }
-  .skipped  { color: #9e9d24; }
-  .error    { color: #c62828; }
-  pre { background:#f8f8f8; padding:8px; border-radius:4px;
-        font-size:12px; white-space:pre-wrap; word-break:break-all; max-height:120px; overflow:auto; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #f0f4f8;
+    min-height: 100vh;
+    color: #1a202c;
+  }
+
+  /* ── top nav ── */
+  nav {
+    background: #1e3a5f;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 56px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  nav .logo { font-size: 22px; }
+  nav h1 { color: #fff; font-size: 17px; font-weight: 600; letter-spacing: .3px; }
+  nav .badge {
+    margin-left: auto;
+    background: #2ecc71;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+
+  /* ── layout ── */
+  main { max-width: 1050px; margin: 36px auto; padding: 0 20px; }
+
+  /* ── stat cards ── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    border-left: 4px solid #1e3a5f;
+  }
+  .card.green  { border-left-color: #2ecc71; }
+  .card.yellow { border-left-color: #f39c12; }
+  .card.red    { border-left-color: #e74c3c; }
+  .card .num { font-size: 32px; font-weight: 700; line-height: 1; }
+  .card .lbl { font-size: 12px; color: #718096; margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* ── action bar ── */
+  .action-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #1e3a5f;
+    color: #fff;
+    border: none;
+    padding: 11px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background .15s;
+  }
+  .btn:hover { background: #16305a; }
+  .btn svg { width:16px; height:16px; fill:currentColor; }
+
+  .toast {
+    flex: 1;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .toast.ok  { background: #d4edda; color: #155724; }
+  .toast.err { background: #f8d7da; color: #721c24; }
+
+  /* ── table ── */
+  .table-wrap {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    overflow: hidden;
+  }
+  .table-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 600;
+    font-size: 14px;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    background: #f7fafc;
+    text-align: left;
+    padding: 11px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f4f8;
+    font-size: 13px;
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f7fafc; }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  .pill.replied { background: #d4edda; color: #155724; }
+  .pill.skipped { background: #fff3cd; color: #856404; }
+  .pill.error   { background: #f8d7da; color: #721c24; }
+
+  pre {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 100px;
+    overflow: auto;
+    margin-top: 4px;
+  }
+
+  .empty {
+    text-align: center;
+    padding: 48px 20px;
+    color: #a0aec0;
+    font-size: 14px;
+  }
+  .empty .icon { font-size: 40px; margin-bottom: 12px; }
+
+  /* ── how it works ── */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .step {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    font-size: 12px;
+    text-align: center;
+    min-width: 130px;
+    flex: 1;
+  }
+  .step .icon { font-size: 22px; margin-bottom: 4px; }
+  .step .title { font-weight: 700; font-size: 12px; color: #2d3748; }
+  .step .sub { color: #718096; font-size: 11px; margin-top: 2px; }
+  .arrow { color: #cbd5e0; font-size: 20px; padding: 0 4px; }
 </style>
 </head>
 <body>
-<h1>📧 Email Extractor Dashboard</h1>
-<p>Scans inbox every <strong>2 minutes</strong> for unread emails with PDF/image attachments,
-   extracts data via OCR + LLM, and replies automatically.</p>
 
-<form method="POST" action="/run">
-  <button class="btn" type="submit">▶ Run Now</button>
-</form>
+<nav>
+  <span class="logo">✉️</span>
+  <h1>Email Data Extractor</h1>
+  <span class="badge">● Live</span>
+</nav>
 
-{% if message %}
-<p style="margin-top:16px; padding:12px; background:#e8f5e9; border-radius:6px;">{{ message }}</p>
-{% endif %}
+<main>
 
-<h2>Recent Runs</h2>
-{% if runs %}
-<table>
-  <tr><th>Time</th><th>Sender</th><th>Subject</th><th>Status</th><th>Detail</th></tr>
-  {% for r in runs %}
-  <tr>
-    <td>{{ r.ts }}</td>
-    <td>{{ r.sender }}</td>
-    <td>{{ r.subject }}</td>
-    <td class="{{ r.status }}">{{ r.status }}</td>
-    <td><pre>{{ r.detail }}</pre></td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p>No runs yet. Click <em>Run Now</em> or wait for the scheduler.</p>
-{% endif %}
+  <!-- stat cards -->
+  {% set replied = runs | selectattr('status','equalto','replied') | list | length %}
+  {% set skipped = runs | selectattr('status','equalto','skipped') | list | length %}
+  {% set errors  = runs | selectattr('status','equalto','error')   | list | length %}
+  <div class="cards">
+    <div class="card">
+      <div class="num">{{ runs | length }}</div>
+      <div class="lbl">Total Processed</div>
+    </div>
+    <div class="card green">
+      <div class="num">{{ replied }}</div>
+      <div class="lbl">Replied</div>
+    </div>
+    <div class="card yellow">
+      <div class="num">{{ skipped }}</div>
+      <div class="lbl">Skipped (no attachment)</div>
+    </div>
+    <div class="card red">
+      <div class="num">{{ errors }}</div>
+      <div class="lbl">Errors</div>
+    </div>
+  </div>
+
+  <!-- pipeline steps -->
+  <div class="pipeline">
+    <div class="step"><div class="icon">📥</div><div class="title">Fetch Email</div><div class="sub">IMAP / Gmail</div></div>
+    <div class="arrow">›</div>
+    <div class="step"><div class="icon">📎</div><div class="title">Extract Attachment</div><div class="sub">PDF / Image</div></div>
+    <div class="arrow">›</div>
+    <div class="step"><div class="icon">🔍</div><div class="title">OCR / Vision</div><div class="sub">Printed or Handwritten</div></div>
+    <div class="arrow">›</div>
+    <div class="step"><div class="icon">🤖</div><div class="title">LLM Structure</div><div class="sub">Claude JSON</div></div>
+    <div class="arrow">›</div>
+    <div class="step"><div class="icon">📤</div><div class="title">Reply</div><div class="sub">Same thread</div></div>
+  </div>
+
+  <!-- action bar -->
+  <div class="action-bar">
+    <form method="POST" action="/run">
+      <button class="btn" type="submit">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        Run Now
+      </button>
+    </form>
+    {% if message %}
+    <div class="toast {{ 'err' if 'Error' in message or 'error' in message else 'ok' }}">{{ message }}</div>
+    {% endif %}
+    <span style="margin-left:auto;font-size:12px;color:#a0aec0;">Auto-scans every 2 minutes</span>
+  </div>
+
+  <!-- runs table -->
+  <div class="table-wrap">
+    <div class="table-header">
+      📋 Recent Activity
+    </div>
+    {% if runs %}
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Sender</th>
+          <th>Subject</th>
+          <th>Status</th>
+          <th>Extracted Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td style="white-space:nowrap;color:#718096;">{{ r.ts }}</td>
+          <td>{{ r.sender }}</td>
+          <td>{{ r.subject }}</td>
+          <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+          <td><pre>{{ r.detail }}</pre></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <div class="icon">📭</div>
+      <div>No activity yet. Click <strong>Run Now</strong> or wait for the auto-scan.</div>
+    </div>
+    {% endif %}
+  </div>
+
+</main>
 </body>
 </html>
 """
