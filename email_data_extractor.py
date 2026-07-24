@@ -1,16 +1,15 @@
 """
 Email -> Attachment -> Extraction -> Reply pipeline
 ====================================================
-Reads unseen emails from an inbox, pulls out PDF/image attachments
-(computer-printed or handwritten scans), extracts the data, and replies
-to the same sender in the same thread with the extracted data.
+Reads unseen emails from an inbox, pulls out PDF/image attachments,
+extracts data using OCR + regex, and replies in the same thread.
 
 Stages:
-  1. fetch_unread_emails()       connect + list new messages
-  2. extract_attachments()       pull PDF/image files out of a message
-  3. get_text_from_attachment()  OCR/parse, printed vs handwritten branch
-  4. structure_with_llm()        turn raw text into clean JSON
-  5. send_reply()                reply in-thread to the original sender
+  1. fetch_unread_emails()   connect + list new messages
+  2. extract_attachments()   pull PDF/image files out of a message
+  3. get_text()              OCR/pdfplumber to get raw text
+  4. parse_fields()          regex extraction — no LLM needed
+  5. send_reply()            reply in-thread to the original sender
 
 Install:
     pip install -r requirements.txt
@@ -23,6 +22,7 @@ import email
 import email.utils
 import os
 import io
+import re
 import json
 import sqlite3
 import logging
@@ -45,7 +45,6 @@ SMTP_HOST    = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 EMAIL_USER   = os.environ["EMAIL_USER"]
 EMAIL_PASS   = os.environ["EMAIL_PASS"]   # Gmail App Password, not your real password
 PROCESSED_DB = os.environ.get("PROCESSED_DB", "processed_messages.sqlite3")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 
 # --------------------------------------------------------------------------
@@ -89,10 +88,23 @@ def log_run(sender, subject, status, detail=""):
 def recent_runs(limit=20):
     with _db() as conn:
         rows = conn.execute(
-            "SELECT ts, sender, subject, status, detail FROM run_log ORDER BY id DESC LIMIT ?",
+            "SELECT ts, sender, subject, status, detail FROM run_log "
+            "WHERE status = 'replied' ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
     return [dict(zip(["ts", "sender", "subject", "status", "detail"], r)) for r in rows]
+
+
+def latest_run():
+    """Return only the single most recent replied email."""
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT ts, sender, subject, status, detail FROM run_log "
+            "WHERE status = 'replied' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if row:
+        return dict(zip(["ts", "sender", "subject", "status", "detail"], row))
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -175,82 +187,71 @@ def get_text_from_pdf(file_bytes: bytes) -> str:
     return "\n".join(pytesseract.image_to_string(img) for img in images)
 
 
-def get_text_from_image(file_bytes: bytes, handwritten_hint: bool = False) -> str:
+def get_text_from_image(file_bytes: bytes) -> str:
     img = Image.open(io.BytesIO(file_bytes))
-
-    if not handwritten_hint:
-        return pytesseract.image_to_string(img)
-
-    # Handwritten: Tesseract is unreliable. Route to a vision LLM instead.
-    return extract_handwritten_via_vision_llm(file_bytes)
-
-
-def extract_handwritten_via_vision_llm(image_bytes: bytes) -> str:
-    """Send raw image to Claude Vision and ask for a plain transcription."""
-    import base64
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    b64 = base64.b64encode(image_bytes).decode()
-
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/png", "data": b64},
-                },
-                {
-                    "type": "text",
-                    "text": (
-                        "Transcribe every word on this handwritten form exactly as written. "
-                        "Output only the transcription, no commentary."
-                    ),
-                },
-            ],
-        }],
-    )
-    return response.content[0].text
+    return pytesseract.image_to_string(img)
 
 
 # --------------------------------------------------------------------------
-# Stage 4: structure raw text into JSON via LLM
+# Stage 4: regex-based field extraction — no LLM, no API key needed
 # --------------------------------------------------------------------------
-# Adjust fields to match the actual document your interviewer uses
-EXTRACTION_SCHEMA = {
-    "applicant_name":   "string or null",
-    "date":             "string (YYYY-MM-DD) or null",
-    "reference_number": "string or null",
-    "account_number":   "string or null",
-    "amount":           "number or null",
-    "pan_number":       "string or null",
-    "address":          "string or null",
-    "raw_notes":        "anything that didn't fit the above fields",
-}
+def parse_fields(raw_text: str) -> dict:
+    """Extract common document fields using regex patterns."""
 
+    def first(pattern, flags=re.IGNORECASE):
+        m = re.search(pattern, raw_text, flags)
+        return m.group(1).strip() if m else None
 
-def structure_with_llm(raw_text: str) -> dict:
-    import anthropic
+    # Email
+    email_match = re.search(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", raw_text)
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    prompt = (
-        "Extract the following fields from the document text below. "
-        f"Return ONLY valid JSON matching this schema, no prose:\n{json.dumps(EXTRACTION_SCHEMA, indent=2)}\n\n"
-        f"Document text:\n{raw_text}"
+    # Phone — Indian (10 digit) or international
+    phone_match = re.search(r"(\+?[0-9]{1,3}[\s\-]?)?(\(?\d{3,5}\)?[\s\-]?\d{3,5}[\s\-]?\d{3,5})", raw_text)
+
+    # Date — DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, Month DD YYYY
+    date_match = re.search(
+        r"\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{2}[\/\-]\d{2}|"
+        r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})\b",
+        raw_text, re.IGNORECASE
     )
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        messages=[{"role": "user", "content": prompt}],
+
+    # Amount — currency symbol or keywords followed by number
+    amount_match = re.search(
+        r"(?:Rs\.?|INR|USD|\$|₹)\s*([\d,]+(?:\.\d{1,2})?)|"
+        r"(?:amount|total|balance|fee|charges)[^\d]{0,10}([\d,]+(?:\.\d{1,2})?)",
+        raw_text, re.IGNORECASE
     )
-    raw = response.content[0].text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {"error": "could not parse LLM output", "raw_output": raw}
+    amount = None
+    if amount_match:
+        raw_amt = amount_match.group(1) or amount_match.group(2)
+        if raw_amt:
+            amount = raw_amt.replace(",", "")
+
+    # PAN number — Indian format: 5 letters, 4 digits, 1 letter
+    pan_match = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])\b", raw_text)
+
+    # Account / reference number — labeled
+    account  = first(r"(?:account\s*(?:no|number|#)[:\s]+)([A-Z0-9\-]{5,20})")
+    ref      = first(r"(?:ref(?:erence)?\s*(?:no|number|#|id)?[:\s]+)([A-Z0-9\-]{4,20})")
+
+    # Name — labeled field
+    name     = first(r"(?:name|applicant|candidate)[:\s]+([A-Za-z]+(?: [A-Za-z]+){1,4})")
+
+    # Skills section (useful for resumes)
+    skills_match = re.search(r"(?:skills?|technologies)[:\s\n]+([^\n]{10,300})", raw_text, re.IGNORECASE)
+
+    return {
+        "name":             name,
+        "email":            email_match.group(0) if email_match else None,
+        "phone":            phone_match.group(0).strip() if phone_match else None,
+        "date":             date_match.group(0) if date_match else None,
+        "amount":           amount,
+        "pan_number":       pan_match.group(1) if pan_match else None,
+        "account_number":   account,
+        "reference_number": ref,
+        "skills":           skills_match.group(1).strip() if skills_match else None,
+        "raw_text_preview": raw_text[:300].replace("\n", " "),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -301,11 +302,9 @@ def run_once() -> dict:
                     if kind == "pdf":
                         raw_text = get_text_from_pdf(content)
                     else:
-                        raw_text = get_text_from_image(content, handwritten_hint=False)
-                        if len(raw_text.strip()) < 5:
-                            raw_text = get_text_from_image(content, handwritten_hint=True)
+                        raw_text = get_text_from_image(content)
 
-                    record = structure_with_llm(raw_text)
+                    record = parse_fields(raw_text)
                     record["_source_file"] = filename
                     extracted_records.append(record)
                 except Exception as e:

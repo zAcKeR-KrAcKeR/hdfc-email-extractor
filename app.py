@@ -7,11 +7,10 @@ Endpoints:
 """
 
 import threading
-import json
 from flask import Flask, jsonify, render_template_string
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from email_data_extractor import run_once, recent_runs
+from email_data_extractor import run_once, latest_run
 
 app = Flask(__name__)
 
@@ -253,7 +252,7 @@ DASHBOARD_HTML = """
     <div class="arrow">›</div>
     <div class="step"><div class="icon">🔍</div><div class="title">OCR / Vision</div><div class="sub">Printed or Handwritten</div></div>
     <div class="arrow">›</div>
-    <div class="step"><div class="icon">🤖</div><div class="title">LLM Structure</div><div class="sub">Claude JSON</div></div>
+    <div class="step"><div class="icon">🔎</div><div class="title">Regex Parse</div><div class="sub">No API needed</div></div>
     <div class="arrow">›</div>
     <div class="step"><div class="icon">📤</div><div class="title">Reply</div><div class="sub">Same thread</div></div>
   </div>
@@ -272,12 +271,12 @@ DASHBOARD_HTML = """
     <span style="margin-left:auto;font-size:12px;color:#a0aec0;">Auto-scans every 2 minutes</span>
   </div>
 
-  <!-- runs table -->
+  <!-- latest email card -->
   <div class="table-wrap">
     <div class="table-header">
-      📋 Recent Activity
+      📋 Latest Processed Email
     </div>
-    {% if runs %}
+    {% if latest %}
     <table>
       <thead>
         <tr>
@@ -289,21 +288,19 @@ DASHBOARD_HTML = """
         </tr>
       </thead>
       <tbody>
-        {% for r in runs %}
         <tr>
-          <td style="white-space:nowrap;color:#718096;">{{ r.ts }}</td>
-          <td>{{ r.sender }}</td>
-          <td>{{ r.subject }}</td>
-          <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
-          <td><pre>{{ r.detail }}</pre></td>
+          <td style="white-space:nowrap;color:#718096;">{{ latest.ts }}</td>
+          <td>{{ latest.sender }}</td>
+          <td>{{ latest.subject }}</td>
+          <td><span class="pill {{ latest.status }}">{{ latest.status }}</span></td>
+          <td><pre>{{ latest.detail }}</pre></td>
         </tr>
-        {% endfor %}
       </tbody>
     </table>
     {% else %}
     <div class="empty">
       <div class="icon">📭</div>
-      <div>No activity yet. Click <strong>Run Now</strong> or wait for the auto-scan.</div>
+      <div>No emails processed yet. Send an email with a PDF/image attachment to <strong>{{ inbox }}</strong>, then click <strong>Run Now</strong>.</div>
     </div>
     {% endif %}
   </div>
@@ -314,19 +311,20 @@ DASHBOARD_HTML = """
 """
 
 
+import os as _os
+
 @app.route("/", methods=["GET"])
 def index():
-    runs = recent_runs(20)
-    return render_template_string(DASHBOARD_HTML, runs=runs, message=None)
+    return render_template_string(DASHBOARD_HTML, latest=latest_run(),
+                                  inbox=_os.environ.get("EMAIL_USER", ""), message=None)
 
 
 @app.route("/run", methods=["POST"])
 def trigger_run():
     if not _running.acquire(blocking=False):
-        runs = recent_runs(20)
-        return render_template_string(
-            DASHBOARD_HTML, runs=runs, message="A run is already in progress — try again shortly."
-        )
+        return render_template_string(DASHBOARD_HTML, latest=latest_run(),
+                                      inbox=_os.environ.get("EMAIL_USER", ""),
+                                      message="A run is already in progress — try again shortly.")
     try:
         result = run_once()
         msg = f"Done. Processed: {result['processed']} | Skipped: {result['skipped']} | Errors: {len(result['errors'])}"
@@ -335,8 +333,8 @@ def trigger_run():
     finally:
         _running.release()
 
-    runs = recent_runs(20)
-    return render_template_string(DASHBOARD_HTML, runs=runs, message=msg)
+    return render_template_string(DASHBOARD_HTML, latest=latest_run(),
+                                  inbox=_os.environ.get("EMAIL_USER", ""), message=msg)
 
 
 @app.route("/status", methods=["GET"])
