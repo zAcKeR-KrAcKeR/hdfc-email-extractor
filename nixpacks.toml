@@ -1,0 +1,3 @@
+# Tell Railway/Nixpacks to install tesseract and poppler as system packages
+[phases.setup]
+nixPkgs = ["tesseract", "poppler_utils"]
