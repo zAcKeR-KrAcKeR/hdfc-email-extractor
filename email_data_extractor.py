@@ -108,6 +108,9 @@ def fetch_unread_emails():
     ids = data[0].split()
     log.info(f"Found {len(ids)} unread email(s).")
 
+    # Only process the 5 most recent per run to avoid overload
+    ids = ids[-5:]
+
     for num in ids:
         status, msg_data = imap.fetch(num, "(RFC822)")
         raw_email = msg_data[0][1]
