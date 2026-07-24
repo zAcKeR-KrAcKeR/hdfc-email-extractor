@@ -23,284 +23,240 @@ DASHBOARD_HTML = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Email Data Extractor</title>
+<title>Email Attachment Extractor</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    background: #f0f4f8;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #f5f5f5;
     min-height: 100vh;
-    color: #1a202c;
+    color: #222;
+    font-size: 14px;
   }
 
-  /* ── top nav ── */
-  nav {
-    background: #1e3a5f;
-    padding: 0 32px;
+  header {
+    background: #1c1c1c;
+    color: #fff;
+    padding: 0 40px;
+    height: 52px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    height: 56px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    justify-content: space-between;
   }
-  nav .logo { font-size: 22px; }
-  nav h1 { color: #fff; font-size: 17px; font-weight: 600; letter-spacing: .3px; }
-  nav .badge {
-    margin-left: auto;
-    background: #2ecc71;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 20px;
-    text-transform: uppercase;
-    letter-spacing: .5px;
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+  .status-dot {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: #aaa;
   }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #4caf50; }
 
-  /* ── layout ── */
-  main { max-width: 1050px; margin: 36px auto; padding: 0 20px; }
+  main { max-width: 960px; margin: 32px auto; padding: 0 24px; }
 
-  /* ── stat cards ── */
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    margin-bottom: 28px;
-  }
-  .card {
+  /* description */
+  .description {
     background: #fff;
-    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
     padding: 20px 24px;
-    box-shadow: 0 1px 4px rgba(0,0,0,.08);
-    border-left: 4px solid #1e3a5f;
+    margin-bottom: 24px;
+    line-height: 1.6;
+    color: #444;
   }
-  .card.green  { border-left-color: #2ecc71; }
-  .card.yellow { border-left-color: #f39c12; }
-  .card.red    { border-left-color: #e74c3c; }
-  .card .num { font-size: 32px; font-weight: 700; line-height: 1; }
-  .card .lbl { font-size: 12px; color: #718096; margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .description h2 { font-size: 13px; font-weight: 700; color: #111; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .description p  { font-size: 13px; }
 
-  /* ── action bar ── */
-  .action-bar {
+  /* pipeline */
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    margin-top: 16px;
+  }
+  .step {
+    flex: 1;
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .step .num  { font-size: 11px; color: #999; margin-bottom: 3px; }
+  .step .lbl  { font-size: 12px; font-weight: 600; color: #222; }
+  .step .sub  { font-size: 11px; color: #888; margin-top: 2px; }
+  .arrow { color: #bbb; padding: 0 4px; display: flex; align-items: center; font-size: 16px; }
+
+  /* action */
+  .action-row {
     display: flex;
     align-items: center;
     gap: 16px;
     margin-bottom: 20px;
   }
   .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #1e3a5f;
+    background: #1c1c1c;
     color: #fff;
     border: none;
-    padding: 11px 24px;
-    border-radius: 8px;
+    padding: 9px 20px;
+    border-radius: 4px;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    transition: background .15s;
-  }
-  .btn:hover { background: #16305a; }
-  .btn svg { width:16px; height:16px; fill:currentColor; }
-
-  .toast {
-    flex: 1;
-    padding: 10px 16px;
-    border-radius: 8px;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    transition: background 0.15s;
   }
-  .toast.ok  { background: #d4edda; color: #155724; }
-  .toast.err { background: #f8d7da; color: #721c24; }
+  .btn:hover { background: #333; }
+  .note { font-size: 12px; color: #999; margin-left: auto; }
 
-  /* ── table ── */
-  .table-wrap {
+  .alert {
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    border-left: 3px solid;
+  }
+  .alert.ok  { background: #f0faf0; border-color: #4caf50; color: #2e7d32; }
+  .alert.err { background: #fff5f5; border-color: #f44336; color: #c62828; }
+
+  /* result card */
+  .card {
     background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
     overflow: hidden;
   }
-  .table-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #e2e8f0;
-    font-weight: 600;
-    font-size: 14px;
-    color: #2d3748;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .card-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid #e0e0e0;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #555;
+    background: #fafafa;
   }
   table { width: 100%; border-collapse: collapse; }
   th {
-    background: #f7fafc;
     text-align: left;
-    padding: 11px 16px;
+    padding: 10px 16px;
     font-size: 11px;
     font-weight: 700;
-    color: #718096;
+    color: #888;
     text-transform: uppercase;
-    letter-spacing: .6px;
-    border-bottom: 1px solid #e2e8f0;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #ebebeb;
+    background: #fafafa;
   }
   td {
     padding: 12px 16px;
-    border-bottom: 1px solid #f0f4f8;
     font-size: 13px;
     vertical-align: top;
+    color: #333;
   }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #f7fafc; }
-
-  .pill {
+  .tag {
     display: inline-block;
-    padding: 2px 10px;
-    border-radius: 20px;
+    padding: 2px 9px;
+    border-radius: 3px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: .4px;
+    letter-spacing: 0.4px;
   }
-  .pill.replied { background: #d4edda; color: #155724; }
-  .pill.skipped { background: #fff3cd; color: #856404; }
-  .pill.error   { background: #f8d7da; color: #721c24; }
-
+  .tag.replied { background: #e8f5e9; color: #2e7d32; }
+  .tag.error   { background: #ffebee; color: #c62828; }
   pre {
-    background: #f7fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 8px 10px;
-    font-size: 11px;
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 12px;
     white-space: pre-wrap;
     word-break: break-all;
-    max-height: 100px;
+    max-height: 140px;
     overflow: auto;
-    margin-top: 4px;
+    font-family: 'Consolas', 'Courier New', monospace;
   }
-
   .empty {
+    padding: 40px 20px;
     text-align: center;
-    padding: 48px 20px;
-    color: #a0aec0;
-    font-size: 14px;
+    color: #999;
+    font-size: 13px;
   }
-  .empty .icon { font-size: 40px; margin-bottom: 12px; }
-
-  /* ── how it works ── */
-  .pipeline {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    margin-bottom: 28px;
-    flex-wrap: wrap;
-  }
-  .step {
-    background: #fff;
-    border-radius: 10px;
-    padding: 14px 18px;
-    box-shadow: 0 1px 4px rgba(0,0,0,.08);
-    font-size: 12px;
-    text-align: center;
-    min-width: 130px;
-    flex: 1;
-  }
-  .step .icon { font-size: 22px; margin-bottom: 4px; }
-  .step .title { font-weight: 700; font-size: 12px; color: #2d3748; }
-  .step .sub { color: #718096; font-size: 11px; margin-top: 2px; }
-  .arrow { color: #cbd5e0; font-size: 20px; padding: 0 4px; }
 </style>
 </head>
 <body>
 
-<nav>
-  <span class="logo">✉️</span>
-  <h1>Email Data Extractor</h1>
-  <span class="badge">● Live</span>
-</nav>
+<header>
+  <h1>Email Attachment Extractor</h1>
+  <div class="status-dot"><span class="dot"></span> Running</div>
+</header>
 
 <main>
 
-  <!-- stat cards -->
-  {% set replied = runs | selectattr('status','equalto','replied') | list | length %}
-  {% set skipped = runs | selectattr('status','equalto','skipped') | list | length %}
-  {% set errors  = runs | selectattr('status','equalto','error')   | list | length %}
-  <div class="cards">
-    <div class="card">
-      <div class="num">{{ runs | length }}</div>
-      <div class="lbl">Total Processed</div>
-    </div>
-    <div class="card green">
-      <div class="num">{{ replied }}</div>
-      <div class="lbl">Replied</div>
-    </div>
-    <div class="card yellow">
-      <div class="num">{{ skipped }}</div>
-      <div class="lbl">Skipped (no attachment)</div>
-    </div>
-    <div class="card red">
-      <div class="num">{{ errors }}</div>
-      <div class="lbl">Errors</div>
+  <!-- how it works -->
+  <div class="description">
+    <h2>How it works</h2>
+    <p>
+      This service monitors a Gmail inbox every 2 minutes. When an email arrives with a PDF or image
+      attachment, it extracts the text using OCR (pdfplumber for digital PDFs, Tesseract for scanned
+      images), parses structured fields using regex — name, email, phone, dates, amounts, PAN, reference
+      numbers — and sends an automated reply to the original sender with the extracted data in the same
+      thread. Each message is processed exactly once.
+    </p>
+    <div class="pipeline" style="margin-top:16px;">
+      <div class="step"><div class="num">1</div><div class="lbl">Fetch Email</div><div class="sub">IMAP / Gmail</div></div>
+      <div class="arrow">&#8250;</div>
+      <div class="step"><div class="num">2</div><div class="lbl">Read Attachment</div><div class="sub">PDF or Image</div></div>
+      <div class="arrow">&#8250;</div>
+      <div class="step"><div class="num">3</div><div class="lbl">OCR Extraction</div><div class="sub">pdfplumber / Tesseract</div></div>
+      <div class="arrow">&#8250;</div>
+      <div class="step"><div class="num">4</div><div class="lbl">Field Parsing</div><div class="sub">Regex — no API</div></div>
+      <div class="arrow">&#8250;</div>
+      <div class="step"><div class="num">5</div><div class="lbl">Auto Reply</div><div class="sub">Same thread</div></div>
     </div>
   </div>
 
-  <!-- pipeline steps -->
-  <div class="pipeline">
-    <div class="step"><div class="icon">📥</div><div class="title">Fetch Email</div><div class="sub">IMAP / Gmail</div></div>
-    <div class="arrow">›</div>
-    <div class="step"><div class="icon">📎</div><div class="title">Extract Attachment</div><div class="sub">PDF / Image</div></div>
-    <div class="arrow">›</div>
-    <div class="step"><div class="icon">🔍</div><div class="title">OCR / Vision</div><div class="sub">Printed or Handwritten</div></div>
-    <div class="arrow">›</div>
-    <div class="step"><div class="icon">🔎</div><div class="title">Regex Parse</div><div class="sub">No API needed</div></div>
-    <div class="arrow">›</div>
-    <div class="step"><div class="icon">📤</div><div class="title">Reply</div><div class="sub">Same thread</div></div>
-  </div>
-
-  <!-- action bar -->
-  <div class="action-bar">
+  <!-- trigger -->
+  <div class="action-row">
     <form method="POST" action="/run">
-      <button class="btn" type="submit">
-        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-        Run Now
-      </button>
+      <button class="btn" type="submit">Run Now</button>
     </form>
     {% if message %}
-    <div class="toast {{ 'err' if 'Error' in message or 'error' in message else 'ok' }}">{{ message }}</div>
+    <div class="alert {{ 'err' if 'Error' in message or 'error' in message else 'ok' }}">{{ message }}</div>
     {% endif %}
-    <span style="margin-left:auto;font-size:12px;color:#a0aec0;">Auto-scans every 2 minutes</span>
+    <span class="note">Inbox: {{ inbox }} &nbsp;&middot;&nbsp; Auto-scan every 2 min</span>
   </div>
 
-  <!-- latest email card -->
-  <div class="table-wrap">
-    <div class="table-header">
-      📋 Latest Processed Email
-    </div>
+  <!-- latest result -->
+  <div class="card">
+    <div class="card-header">Latest Processed Email</div>
     {% if latest %}
     <table>
       <thead>
         <tr>
-          <th>Time (UTC)</th>
-          <th>Sender</th>
+          <th>Received (UTC)</th>
+          <th>From</th>
           <th>Subject</th>
-          <th>Status</th>
-          <th>Extracted Data</th>
+          <th>Result</th>
+          <th>Extracted Fields</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td style="white-space:nowrap;color:#718096;">{{ latest.ts }}</td>
+          <td>{{ latest.ts }}</td>
           <td>{{ latest.sender }}</td>
           <td>{{ latest.subject }}</td>
-          <td><span class="pill {{ latest.status }}">{{ latest.status }}</span></td>
+          <td><span class="tag {{ latest.status }}">{{ latest.status }}</span></td>
           <td><pre>{{ latest.detail }}</pre></td>
         </tr>
       </tbody>
     </table>
     {% else %}
     <div class="empty">
-      <div class="icon">📭</div>
-      <div>No emails processed yet. Send an email with a PDF/image attachment to <strong>{{ inbox }}</strong>, then click <strong>Run Now</strong>.</div>
+      No emails have been processed yet. Send an email with a PDF or image attachment
+      to <strong>{{ inbox }}</strong> and click <strong>Run Now</strong>.
     </div>
     {% endif %}
   </div>
