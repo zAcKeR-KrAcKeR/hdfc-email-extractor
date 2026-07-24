@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: hdfc-email-extractor
+    runtime: python
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    envVars:
+      - key: IMAP_HOST
+        value: imap.gmail.com
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
