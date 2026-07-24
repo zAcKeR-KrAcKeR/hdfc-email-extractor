@@ -277,15 +277,30 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     reply["In-Reply-To"] = original_message_id   # keeps it threaded
     reply["References"]  = original_message_id
 
-    # Port 587 + STARTTLS works on Railway; port 465 SSL is often blocked
-    with smtplib.SMTP(SMTP_HOST, 587) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(EMAIL_USER, EMAIL_PASS)
-        smtp.sendmail(EMAIL_USER, [to_addr], reply.as_string())
-
-    log.info(f"Replied to {to_addr} | subject: {subject}")
+    import time, ssl
+    last_err = None
+    # Try port 587 STARTTLS first, then 465 SSL as fallback, with retries
+    attempts = [(587, False), (465, True), (587, False)]
+    for port, use_ssl in attempts:
+        try:
+            if use_ssl:
+                ctx = ssl.create_default_context()
+                conn = smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=30)
+            else:
+                conn = smtplib.SMTP(SMTP_HOST, port, timeout=30)
+                conn.ehlo()
+                conn.starttls()
+                conn.ehlo()
+            with conn:
+                conn.login(EMAIL_USER, EMAIL_PASS)
+                conn.sendmail(EMAIL_USER, [to_addr], reply.as_string())
+            log.info(f"Replied to {to_addr} | subject: {subject}")
+            return
+        except Exception as e:
+            last_err = e
+            log.warning(f"SMTP attempt port {port} failed: {e} — retrying...")
+            time.sleep(3)
+    raise RuntimeError(f"All SMTP attempts failed: {last_err}")
 
 
 # --------------------------------------------------------------------------
