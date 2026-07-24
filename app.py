@@ -226,7 +226,7 @@ DASHBOARD_HTML = """
     {% if message %}
     <div class="alert {{ 'err' if 'Error' in message or 'error' in message else 'ok' }}">{{ message }}</div>
     {% endif %}
-    <span class="note">Inbox: {{ inbox }} &nbsp;&middot;&nbsp; Auto-scan every 2 min</span>
+    <span class="note">Inbox: <strong>{{ inbox }}</strong> &nbsp; Auto-scan every 2 min</span>
   </div>
 
   <!-- latest result -->
