@@ -170,13 +170,13 @@ DASHBOARD_HTML = """
     background: #f5f5f5;
     border: 1px solid #e0e0e0;
     border-radius: 4px;
-    padding: 10px 12px;
+    padding: 12px 14px;
     font-size: 12px;
     white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 140px;
+    word-break: break-word;
     overflow: auto;
     font-family: 'Consolas', 'Courier New', monospace;
+    line-height: 1.6;
   }
   .empty {
     padding: 40px 20px;

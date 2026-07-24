@@ -86,7 +86,7 @@ def log_run(sender, subject, status, detail=""):
     with _db() as conn:
         conn.execute(
             "INSERT INTO run_log (sender, subject, status, detail) VALUES (?,?,?,?)",
-            (sender, subject, status, detail[:2000]),
+            (sender, subject, status, detail[:10000]),
         )
 
 
@@ -347,7 +347,11 @@ def run_once() -> dict:
             send_reply(sender_email, subject, message_id, extracted_records)
             mark_processed(message_id)
             results["processed"] += 1
-            log_run(sender_email, subject, "replied", extracted_records[0].get("_raw_text", "")[:500] if extracted_records else "")
+            full_text = "\n\n".join(
+                f"[{r.get('_source_file','')}]\n{r.get('_raw_text', r.get('error',''))}"
+                for r in extracted_records
+            )
+            log_run(sender_email, subject, "replied", full_text)
 
     except Exception as e:
         log.error(f"run_once failed: {e}")
