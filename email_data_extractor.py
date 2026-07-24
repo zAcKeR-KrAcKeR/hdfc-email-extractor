@@ -277,7 +277,11 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     reply["In-Reply-To"] = original_message_id   # keeps it threaded
     reply["References"]  = original_message_id
 
-    with smtplib.SMTP_SSL(SMTP_HOST, 465) as smtp:
+    # Port 587 + STARTTLS works on Railway; port 465 SSL is often blocked
+    with smtplib.SMTP(SMTP_HOST, 587) as smtp:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.ehlo()
         smtp.login(EMAIL_USER, EMAIL_PASS)
         smtp.sendmail(EMAIL_USER, [to_addr], reply.as_string())
 
