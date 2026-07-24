@@ -1,3 +1,8 @@
-# Tell Railway/Nixpacks to install tesseract and poppler as system packages
 [phases.setup]
-nixPkgs = ["tesseract", "poppler_utils"]
+nixPkgs = ["python312", "python312Packages.pip", "tesseract", "poppler_utils"]
+
+[phases.install]
+cmds = ["python3 -m venv /opt/venv && . /opt/venv/bin/activate && pip install -r requirements.txt"]
+
+[start]
+cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120"
