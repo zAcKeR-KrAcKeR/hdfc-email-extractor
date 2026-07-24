@@ -108,17 +108,20 @@ def latest_run():
 
 
 # --------------------------------------------------------------------------
-# Stage 1: fetch unread emails
+# Stage 1: fetch emails received in the last 3 days that haven't been processed
 # --------------------------------------------------------------------------
 def fetch_unread_emails():
-    """Yields (msg, message_id, sender_email, subject) for each unseen email."""
+    """Yields (msg, message_id, sender_email, subject) for each unprocessed email."""
+    import datetime
     imap = imaplib.IMAP4_SSL(IMAP_HOST)
     imap.login(EMAIL_USER, EMAIL_PASS)
     imap.select("INBOX")
 
-    status, data = imap.search(None, "UNSEEN")
+    # Search by date so opening an email never causes it to be skipped
+    since = (datetime.date.today() - datetime.timedelta(days=3)).strftime("%d-%b-%Y")
+    status, data = imap.search(None, f'(SINCE "{since}")')
     ids = data[0].split()
-    log.info(f"Found {len(ids)} unread email(s).")
+    log.info(f"Found {len(ids)} email(s) in the last 3 days.")
 
     # Only process the 5 most recent per run to avoid overload
     ids = ids[-5:]
