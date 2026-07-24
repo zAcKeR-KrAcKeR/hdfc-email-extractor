@@ -201,8 +201,8 @@ DASHBOARD_HTML = """
     <p>
       This service monitors a Gmail inbox every 2 minutes. When an email arrives with a PDF or image
       attachment, it extracts the text using OCR (pdfplumber for digital PDFs, Tesseract for scanned
-      images), parses structured fields using regex — name, email, phone, dates, amounts, PAN, reference
-      numbers — and sends an automated reply to the original sender with the extracted data in the same
+      images), parses structured fields using regex (name, email, phone, dates, amounts, PAN, reference
+      numbers) and sends an automated reply to the original sender with the extracted data in the same
       thread. Each message is processed exactly once.
     </p>
     <div class="pipeline" style="margin-top:16px;">
@@ -212,7 +212,7 @@ DASHBOARD_HTML = """
       <div class="arrow">&#8250;</div>
       <div class="step"><div class="num">3</div><div class="lbl">OCR Extraction</div><div class="sub">pdfplumber / Tesseract</div></div>
       <div class="arrow">&#8250;</div>
-      <div class="step"><div class="num">4</div><div class="lbl">Field Parsing</div><div class="sub">Regex — no API</div></div>
+      <div class="step"><div class="num">4</div><div class="lbl">Field Parsing</div><div class="sub">Regex, no API</div></div>
       <div class="arrow">&#8250;</div>
       <div class="step"><div class="num">5</div><div class="lbl">Auto Reply</div><div class="sub">Same thread</div></div>
     </div>
@@ -226,7 +226,7 @@ DASHBOARD_HTML = """
     {% if message %}
     <div class="alert {{ 'err' if 'Error' in message or 'error' in message else 'ok' }}">{{ message }}</div>
     {% endif %}
-    <span class="note">Inbox: <strong>{{ inbox }}</strong> &nbsp; Auto-scan every 2 min</span>
+    <span class="note">Inbox: <strong>{{ inbox }}</strong> &nbsp; Scans automatically every 2 min</span>
   </div>
 
   <!-- latest result -->
