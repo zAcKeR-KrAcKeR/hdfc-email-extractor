@@ -270,11 +270,12 @@ def parse_fields(raw_text: str) -> dict:
 # Stage 5: reply in-thread to the original sender
 # --------------------------------------------------------------------------
 def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_records: list):
-    body_lines = ["Hello,\n\nHere is the data extracted from your attachment(s):\n"]
+    body_lines = ["Hello,\n\nHere is the text extracted from your attachment(s):\n"]
     for i, record in enumerate(extracted_records, 1):
-        body_lines.append(f"--- Attachment {i}: {record.get('_source_file', '')} ---")
-        clean = {k: v for k, v in record.items() if k != "_source_file"}
-        body_lines.append(json.dumps(clean, indent=2))
+        filename = record.get("_source_file", f"Attachment {i}")
+        raw_text = record.get("_raw_text", record.get("error", "Could not extract text."))
+        body_lines.append(f"--- {filename} ---")
+        body_lines.append(raw_text)
         body_lines.append("")
     body_lines.append("\nThis is an automated response. Please do not reply to this email.")
     body = "\n".join(body_lines)
@@ -337,6 +338,7 @@ def run_once() -> dict:
 
                     record = parse_fields(raw_text)
                     record["_source_file"] = filename
+                    record["_raw_text"] = raw_text  # kept for reply body
                     extracted_records.append(record)
                 except Exception as e:
                     log.error(f"Error processing {filename}: {e}")
@@ -345,7 +347,7 @@ def run_once() -> dict:
             send_reply(sender_email, subject, message_id, extracted_records)
             mark_processed(message_id)
             results["processed"] += 1
-            log_run(sender_email, subject, "replied", json.dumps(extracted_records)[:500])
+            log_run(sender_email, subject, "replied", extracted_records[0].get("_raw_text", "")[:500] if extracted_records else "")
 
     except Exception as e:
         log.error(f"run_once failed: {e}")
