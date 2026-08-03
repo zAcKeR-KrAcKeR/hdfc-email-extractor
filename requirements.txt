@@ -3,3 +3,6 @@ apscheduler>=3.10
 pdfplumber>=0.11
 pillow>=10.0
 gunicorn>=22.0
+pytesseract>=0.3.10
+pdf2image>=1.17.0
+

@@ -47,9 +47,10 @@ log = logging.getLogger(__name__)
 # --------------------------------------------------------------------------
 IMAP_HOST    = os.environ.get("IMAP_HOST", "imap.gmail.com")
 SMTP_HOST    = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-EMAIL_USER   = os.environ["EMAIL_USER"]
-EMAIL_PASS   = os.environ["EMAIL_PASS"]   # Gmail App Password, not your real password
+EMAIL_USER   = os.environ.get("EMAIL_USER", "")
+EMAIL_PASS   = os.environ.get("EMAIL_PASS", "")
 PROCESSED_DB = os.environ.get("PROCESSED_DB", "processed_messages.sqlite3")
+
 
 
 # --------------------------------------------------------------------------
@@ -118,18 +119,30 @@ def latest_run():
 def fetch_unread_emails():
     """Yields (msg, message_id, sender_email, subject) for each unprocessed email."""
     import datetime
-    imap = imaplib.IMAP4_SSL(IMAP_HOST)
-    imap.login(EMAIL_USER, EMAIL_PASS)
+    email_user = os.environ.get("EMAIL_USER", EMAIL_USER)
+    email_pass = os.environ.get("EMAIL_PASS", EMAIL_PASS)
+    imap_host = os.environ.get("IMAP_HOST", IMAP_HOST)
+
+    if not email_user or not email_pass:
+        log.error("EMAIL_USER or EMAIL_PASS environment variables are missing.")
+        raise ValueError("EMAIL_USER and EMAIL_PASS environment variables must be configured on Render.")
+
+    imap = imaplib.IMAP4_SSL(imap_host)
+    imap.login(email_user, email_pass)
     imap.select("INBOX")
 
-    # Search by date so opening an email never causes it to be skipped
+    # Search for UNSEEN emails in the last 3 days, fallback to SINCE
     since = (datetime.date.today() - datetime.timedelta(days=3)).strftime("%d-%b-%Y")
-    status, data = imap.search(None, f'(SINCE "{since}")')
-    ids = data[0].split()
-    log.info(f"Found {len(ids)} email(s) in the last 3 days.")
+    status, data = imap.search(None, f'(UNSEEN SINCE "{since}")')
+    if status != "OK" or not data[0]:
+        status, data = imap.search(None, f'(SINCE "{since}")')
+
+    ids = data[0].split() if data and data[0] else []
+    log.info(f"Found {len(ids)} matching email(s).")
 
     # Only process the 5 most recent per run to avoid overload
     ids = ids[-5:]
+
 
     for num in ids:
         status, msg_data = imap.fetch(num, "(RFC822)")
@@ -270,6 +283,10 @@ def parse_fields(raw_text: str) -> dict:
 # Stage 5: reply in-thread to the original sender
 # --------------------------------------------------------------------------
 def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_records: list):
+    email_user = os.environ.get("EMAIL_USER", EMAIL_USER)
+    email_pass = os.environ.get("EMAIL_PASS", EMAIL_PASS)
+    smtp_host = os.environ.get("SMTP_HOST", SMTP_HOST)
+
     body_lines = ["Hello,\n\nHere is the text extracted from your attachment(s):\n"]
     for i, record in enumerate(extracted_records, 1):
         filename = record.get("_source_file", f"Attachment {i}")
@@ -281,7 +298,7 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     body = "\n".join(body_lines)
 
     reply = MIMEText(body)
-    reply["From"]       = EMAIL_USER
+    reply["From"]       = email_user
     reply["To"]         = to_addr
     reply["Subject"]    = "Re: " + subject
     reply["In-Reply-To"] = original_message_id   # keeps it threaded
@@ -295,15 +312,15 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
         try:
             if use_ssl:
                 ctx = ssl.create_default_context()
-                conn = smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=30)
+                conn = smtplib.SMTP_SSL(smtp_host, port, context=ctx, timeout=30)
             else:
-                conn = smtplib.SMTP(SMTP_HOST, port, timeout=30)
+                conn = smtplib.SMTP(smtp_host, port, timeout=30)
                 conn.ehlo()
                 conn.starttls()
                 conn.ehlo()
             with conn:
-                conn.login(EMAIL_USER, EMAIL_PASS)
-                conn.sendmail(EMAIL_USER, [to_addr], reply.as_string())
+                conn.login(email_user, email_pass)
+                conn.sendmail(email_user, [to_addr], reply.as_string())
             log.info(f"Replied to {to_addr} | subject: {subject}")
             return
         except Exception as e:
@@ -311,6 +328,7 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
             log.warning(f"SMTP attempt port {port} failed: {e} — retrying...")
             time.sleep(3)
     raise RuntimeError(f"All SMTP attempts failed: {last_err}")
+
 
 
 # --------------------------------------------------------------------------
