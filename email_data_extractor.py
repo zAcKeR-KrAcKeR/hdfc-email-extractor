@@ -451,14 +451,9 @@ def run_once() -> dict:
         for msg, message_id, sender_email, subject in fetch_unread_emails():
             attachments = extract_attachments(msg)
             if not attachments:
-                no_att_record = [{
-                    "_source_file": "Notice",
-                    "_raw_text": "We received your email, but no valid PDF or Image attachment (PDF, JPG, PNG) was detected.\n\nPlease reply with a PDF or Image attachment to extract text automatically."
-                }]
-                send_reply(sender_email, subject, message_id, no_att_record)
                 mark_processed(message_id)
-                results["processed"] += 1
-                log_run(sender_email, subject, "replied", "Notice sent: no attachments detected")
+                results["skipped"] += 1
+                log_run(sender_email, subject, "skipped", "no attachments")
                 continue
 
             extracted_records = []
@@ -491,6 +486,7 @@ def run_once() -> dict:
         results["errors"].append(str(e))
 
     return results
+
 
 
 
