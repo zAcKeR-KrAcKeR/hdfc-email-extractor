@@ -139,40 +139,43 @@ def fetch_unread_emails():
     imap.login(email_user, email_pass)
     imap.select("INBOX")
 
-    # Search for UNSEEN emails in the last 3 days, fallback to SINCE
-    since = (datetime.date.today() - datetime.timedelta(days=3)).strftime("%d-%b-%Y")
-    status, data = imap.search(None, f'(UNSEEN SINCE "{since}")')
-    if status != "OK" or not data[0]:
-        status, data = imap.search(None, f'(SINCE "{since}")')
+    # Fetch all email IDs received in the last 7 days
+    since = (datetime.date.today() - datetime.timedelta(days=7)).strftime("%d-%b-%Y")
+    status, data = imap.search(None, f'(SINCE "{since}")')
 
     ids = data[0].split() if data and data[0] else []
-    log.info(f"Found {len(ids)} matching email(s).")
+    log.info(f"Found {len(ids)} total email(s) in the last 7 days.")
 
-    # Only process the 5 most recent per run to avoid overload
-    ids = ids[-5:]
-
-
-    for num in ids:
+    yielded_count = 0
+    # Process from newest to oldest
+    for num in reversed(ids):
         status, msg_data = imap.fetch(num, "(RFC822)")
+        if not msg_data or not msg_data[0] or not isinstance(msg_data[0], tuple):
+            continue
         raw_email = msg_data[0][1]
         msg = email.message_from_bytes(raw_email)
 
         message_id = msg.get("Message-ID", "")
+        if not message_id or already_processed(message_id):
+            continue
+
         sender_email = email.utils.parseaddr(msg.get("From"))[1]
-        subject_raw, encoding = decode_header(msg.get("Subject", "No Subject"))[0]
+        subject_header = msg.get("Subject", "No Subject")
+        decoded_parts = decode_header(subject_header)
+        subject_raw, encoding = decoded_parts[0] if decoded_parts else ("No Subject", None)
         if isinstance(subject_raw, bytes):
             subject = subject_raw.decode(encoding or "utf-8", errors="ignore")
         else:
-            subject = subject_raw
-
-        if already_processed(message_id):
-            log.info(f"Skipping already-processed {message_id}")
-            continue
+            subject = str(subject_raw)
 
         yield msg, message_id, sender_email, subject
+        yielded_count += 1
+        if yielded_count >= 5:
+            break
 
     imap.close()
     imap.logout()
+
 
 
 # --------------------------------------------------------------------------
