@@ -316,6 +316,34 @@ def parse_fields(raw_text: str) -> dict:
 # --------------------------------------------------------------------------
 # Stage 5: reply in-thread to the original sender
 # --------------------------------------------------------------------------
+def append_to_sent_folder(to_addr: str, subject: str, body: str, original_message_id: str):
+    """Saves a copy of the outgoing reply into Gmail's Sent Mail folder via IMAP."""
+    email_user = os.environ.get("EMAIL_USER", EMAIL_USER)
+    email_pass = os.environ.get("EMAIL_PASS", EMAIL_PASS)
+    imap_host = os.environ.get("IMAP_HOST", IMAP_HOST)
+
+    if not email_user or not email_pass:
+        return
+
+    try:
+        reply = MIMEText(body)
+        reply["From"] = email_user
+        reply["To"] = to_addr
+        reply["Subject"] = "Re: " + subject
+        if original_message_id:
+            reply["In-Reply-To"] = original_message_id
+            reply["References"] = original_message_id
+
+        imap = imaplib.IMAP4_SSL(imap_host)
+        imap.login(email_user, email_pass)
+        date_str = imaplib.Time2Internaldate(time.time())
+        imap.append('"[Gmail]/Sent Mail"', '\\Seen', date_str, reply.as_bytes())
+        imap.logout()
+        log.info(f"Saved copy to [Gmail]/Sent Mail for {to_addr}")
+    except Exception as e:
+        log.warning(f"Could not append to IMAP Sent folder: {e}")
+
+
 def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_records: list):
     email_user = os.environ.get("EMAIL_USER", EMAIL_USER)
     email_pass = os.environ.get("EMAIL_PASS", EMAIL_PASS)
@@ -361,12 +389,14 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
             ctx.verify_mode = ssl.CERT_NONE
             with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
                 log.info(f"Replied via Brevo API to {to_addr} | subject: {subject}")
+                append_to_sent_folder(to_addr, subject, body, original_message_id)
                 return
         except urllib.error.HTTPError as e:
             err_body = e.read().decode('utf-8', errors='ignore')
             log.error(f"Brevo API HTTP {e.code} Error: {err_body}")
         except Exception as e:
             log.error(f"Brevo API send failed: {e}")
+
 
 
     resend_api_key = os.environ.get("RESEND_API_KEY")
