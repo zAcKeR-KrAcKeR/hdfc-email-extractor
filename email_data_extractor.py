@@ -39,11 +39,14 @@ def _ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
 socket.getaddrinfo = _ipv4_getaddrinfo
 
 try:
-
     import pytesseract
     from pdf2image import convert_from_bytes
     from PIL import Image
+    import shutil
     OCR_AVAILABLE = True
+    t_cmd = shutil.which("tesseract") or "/usr/bin/tesseract"
+    if os.path.exists(t_cmd):
+        pytesseract.pytesseract.tesseract_cmd = t_cmd
 except ImportError:
     OCR_AVAILABLE = False
 
