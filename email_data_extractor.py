@@ -308,6 +308,35 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     body_lines.append("\nThis is an automated response. Please do not reply to this email.")
     body = "\n".join(body_lines)
 
+    resend_api_key = os.environ.get("RESEND_API_KEY")
+    if resend_api_key:
+        import urllib.request
+        try:
+            req_data = json.dumps({
+                "from": email_user,
+                "to": [to_addr],
+                "subject": "Re: " + subject,
+                "text": body,
+                "headers": {
+                    "In-Reply-To": original_message_id,
+                    "References": original_message_id
+                }
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=req_data,
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                log.info(f"Replied via Resend API to {to_addr} | subject: {subject}")
+                return
+        except Exception as e:
+            log.warning(f"Resend API send failed: {e} — falling back to standard SMTP...")
+
     reply = MIMEText(body)
     reply["From"]       = email_user
     reply["To"]         = to_addr
@@ -316,6 +345,7 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     reply["References"]  = original_message_id
 
     import time, ssl
+
     last_err = None
     # Try port 465 SSL first (fastest on Render), then 587 STARTTLS as fallback
     attempts = [(465, True), (587, False), (465, True)]
