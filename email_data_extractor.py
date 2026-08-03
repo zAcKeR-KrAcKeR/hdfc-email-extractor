@@ -223,9 +223,15 @@ def get_text_from_pdf(file_bytes: bytes) -> str:
 
 def get_text_from_image(file_bytes: bytes) -> str:
     if not OCR_AVAILABLE:
-        return "[image attachment — OCR not available on this server]"
-    img = Image.open(io.BytesIO(file_bytes))
-    return pytesseract.image_to_string(img)
+        return "[image attachment — OCR library pytesseract not available on server]"
+    try:
+        img = Image.open(io.BytesIO(file_bytes))
+        text = pytesseract.image_to_string(img).strip()
+        return text if text else "[Image processed via OCR — no text detected in image]"
+    except Exception as e:
+        log.warning(f"pytesseract image_to_string failed: {e}")
+        return f"[Image OCR Error: Tesseract binary not in PATH or failed ({e})]"
+
 
 
 # --------------------------------------------------------------------------
