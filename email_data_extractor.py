@@ -372,9 +372,10 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     log.info(f"send_reply triggered for {to_addr}. BREVO_API_KEY present: {bool(brevo_api_key)}")
     if brevo_api_key:
         import urllib.request, urllib.error, ssl
+        brevo_sender = os.environ.get("BREVO_SENDER_EMAIL", "24070243023@sig.ac.in")
         try:
             req_data = json.dumps({
-                "sender": {"name": email_user, "email": email_user},
+                "sender": {"name": email_user, "email": brevo_sender},
                 "replyTo": {"name": email_user, "email": email_user},
                 "to": [{"email": to_addr}],
                 "subject": "Re: " + subject,
