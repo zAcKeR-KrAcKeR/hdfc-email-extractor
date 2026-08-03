@@ -232,25 +232,30 @@ def get_text_from_pdf(file_bytes: bytes) -> str:
         log.warning(f"pdfplumber failed: {e}")
 
     # Scanned / image-only PDF — needs Tesseract
-    if not OCR_AVAILABLE:
-        return "[scanned PDF — OCR not available on this server]"
+    t_cmd = getattr(pytesseract.pytesseract, 'tesseract_cmd', 'tesseract') if OCR_AVAILABLE else None
+    if not OCR_AVAILABLE or (t_cmd and not shutil.which(t_cmd) and not os.path.exists(t_cmd)):
+        return "[Scanned PDF — Text layer not found. Please upload original PDF document for automatic field extraction.]"
     try:
         images = convert_from_bytes(file_bytes)
         return "\n".join(pytesseract.image_to_string(img) for img in images)
     except Exception as e:
-        return f"[Scanned PDF OCR error: {e}]"
+        return f"[Scanned PDF OCR Notice: {e}]"
 
 
 def get_text_from_image(file_bytes: bytes) -> str:
     if not OCR_AVAILABLE:
-        return "[image attachment — OCR library pytesseract not available on server]"
+        return "[Image attachment received — OCR library pytesseract not available on server]"
     try:
         img = Image.open(io.BytesIO(file_bytes))
+        t_cmd = getattr(pytesseract.pytesseract, 'tesseract_cmd', 'tesseract')
+        if not shutil.which(t_cmd) and not os.path.exists(t_cmd):
+            return "[Image attachment received — Tesseract binary not configured on server. Please send PDF format for instant field extraction.]"
+
         text = pytesseract.image_to_string(img).strip()
-        return text if text else "[Image processed via OCR — no text detected in image]"
+        return text if text else "[Image attachment received — No readable text detected in image]"
     except Exception as e:
         log.warning(f"pytesseract image_to_string failed: {e}")
-        return f"[Image OCR Error: Tesseract binary not in PATH or failed ({e})]"
+        return "[Image attachment received — Could not process text from image. Please attach PDF document for best results.]"
 
 
 
