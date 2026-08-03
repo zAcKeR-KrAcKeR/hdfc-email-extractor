@@ -335,7 +335,37 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
                 log.info(f"Replied via Resend API to {to_addr} | subject: {subject}")
                 return
         except Exception as e:
-            log.warning(f"Resend API send failed: {e} — falling back to standard SMTP...")
+            log.warning(f"Resend API send failed: {e} — falling back...")
+
+    brevo_api_key = os.environ.get("BREVO_API_KEY")
+    if brevo_api_key:
+        import urllib.request
+        try:
+            req_data = json.dumps({
+                "sender": {"email": email_user},
+                "to": [{"email": to_addr}],
+                "subject": "Re: " + subject,
+                "textContent": body,
+                "headers": {
+                    "In-Reply-To": original_message_id,
+                    "References": original_message_id
+                }
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.brevo.com/v3/smtp/email",
+                data=req_data,
+                headers={
+                    "api-key": brevo_api_key,
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                log.info(f"Replied via Brevo API to {to_addr} | subject: {subject}")
+                return
+        except Exception as e:
+            log.warning(f"Brevo API send failed: {e} — falling back...")
+
 
     reply = MIMEText(body)
     reply["From"]       = email_user
