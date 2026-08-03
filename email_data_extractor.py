@@ -184,18 +184,30 @@ def fetch_unread_emails():
 def extract_attachments(msg):
     """Returns list of (filename, file_bytes, kind) where kind is 'pdf' or 'image'."""
     attachments = []
+    img_counter = 1
     for part in msg.walk():
         if part.get_content_maintype() == "multipart":
             continue
+
         filename = part.get_filename()
+        content_type = part.get_content_type().lower()
+
+        if not filename and content_type.startswith("image/"):
+            ext = content_type.split("/")[-1]
+            filename = f"image_{img_counter}.{ext}"
+            img_counter += 1
+
         if not filename:
             continue
 
         content = part.get_payload(decode=True)
+        if not content:
+            continue
+
         lower = filename.lower()
-        if lower.endswith(".pdf"):
+        if lower.endswith(".pdf") or content_type == "application/pdf":
             attachments.append((filename, content, "pdf"))
-        elif lower.endswith((".png", ".jpg", ".jpeg", ".tiff", ".bmp")):
+        elif lower.endswith((".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp", ".jfif", ".heic")) or content_type.startswith("image/"):
             attachments.append((filename, content, "image"))
 
     return attachments
@@ -206,19 +218,24 @@ def extract_attachments(msg):
 # --------------------------------------------------------------------------
 def get_text_from_pdf(file_bytes: bytes) -> str:
     text_parts = []
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            text_parts.append(page.extract_text() or "")
-    text = "\n".join(text_parts).strip()
-
-    if len(text) > 20:
-        return text  # real text layer — fast and exact
+    try:
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                text_parts.append(page.extract_text() or "")
+        text = "\n".join(text_parts).strip()
+        if len(text) > 20:
+            return text  # real text layer — fast and exact
+    except Exception as e:
+        log.warning(f"pdfplumber failed: {e}")
 
     # Scanned / image-only PDF — needs Tesseract
     if not OCR_AVAILABLE:
         return "[scanned PDF — OCR not available on this server]"
-    images = convert_from_bytes(file_bytes)
-    return "\n".join(pytesseract.image_to_string(img) for img in images)
+    try:
+        images = convert_from_bytes(file_bytes)
+        return "\n".join(pytesseract.image_to_string(img) for img in images)
+    except Exception as e:
+        return f"[Scanned PDF OCR error: {e}]"
 
 
 def get_text_from_image(file_bytes: bytes) -> str:
@@ -314,45 +331,6 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     body_lines.append("\nThis is an automated response. Please do not reply to this email.")
     body = "\n".join(body_lines)
 
-    resend_api_key = os.environ.get("RESEND_API_KEY")
-    log.info(f"send_reply triggered for {to_addr}. RESEND_API_KEY present: {bool(resend_api_key)}")
-    if resend_api_key:
-        import urllib.request, urllib.error, ssl
-        from_sender = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
-        try:
-            req_data = json.dumps({
-                "from": from_sender,
-                "to": [to_addr],
-                "subject": "Re: " + subject,
-                "text": body,
-                "headers": {
-                    "In-Reply-To": original_message_id,
-                    "References": original_message_id
-                }
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                "https://api.resend.com/emails",
-                data=req_data,
-                headers={
-                    "Authorization": f"Bearer {resend_api_key}",
-                    "Content-Type": "application/json"
-                },
-                method="POST"
-            )
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
-                log.info(f"Replied via Resend API ({from_sender}) to {to_addr} | subject: {subject}")
-                return
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode('utf-8', errors='ignore')
-            log.error(f"Resend API HTTP {e.code} Error: {err_body}")
-        except Exception as e:
-            log.error(f"Resend API failed: {e}")
-
-
-
     brevo_api_key = os.environ.get("BREVO_API_KEY")
     log.info(f"send_reply triggered for {to_addr}. BREVO_API_KEY present: {bool(brevo_api_key)}")
     if brevo_api_key:
@@ -391,6 +369,43 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
             log.error(f"Brevo API send failed: {e}")
 
 
+    resend_api_key = os.environ.get("RESEND_API_KEY")
+    if resend_api_key:
+        import urllib.request, urllib.error, ssl
+        from_sender = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+        try:
+            req_data = json.dumps({
+                "from": from_sender,
+                "to": [to_addr],
+                "subject": "Re: " + subject,
+                "text": body,
+                "headers": {
+                    "In-Reply-To": original_message_id,
+                    "References": original_message_id
+                }
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=req_data,
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0"
+                },
+                method="POST"
+            )
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+                log.info(f"Replied via Resend API ({from_sender}) to {to_addr} | subject: {subject}")
+                return
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='ignore')
+            log.error(f"Resend API HTTP {e.code} Error: {err_body}")
+        except Exception as e:
+            log.error(f"Resend API failed: {e}")
+
 
     reply = MIMEText(body)
     reply["From"]       = email_user
@@ -402,8 +417,7 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     import time, ssl
 
     last_err = None
-    # Try port 465 SSL first (fastest on Render), then 587 STARTTLS as fallback
-    attempts = [(465, True), (587, False), (465, True)]
+    attempts = [(465, True), (587, False)]
     for port, use_ssl in attempts:
         try:
             if use_ssl:
@@ -421,8 +435,7 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
             return
         except Exception as e:
             last_err = e
-            log.warning(f"SMTP attempt port {port} failed: {e} — retrying...")
-            time.sleep(1)
+            log.warning(f"SMTP attempt port {port} failed: {e}")
     raise RuntimeError(f"All SMTP attempts failed: {last_err}")
 
 
@@ -438,9 +451,14 @@ def run_once() -> dict:
         for msg, message_id, sender_email, subject in fetch_unread_emails():
             attachments = extract_attachments(msg)
             if not attachments:
+                no_att_record = [{
+                    "_source_file": "Notice",
+                    "_raw_text": "We received your email, but no valid PDF or Image attachment (PDF, JPG, PNG) was detected.\n\nPlease reply with a PDF or Image attachment to extract text automatically."
+                }]
+                send_reply(sender_email, subject, message_id, no_att_record)
                 mark_processed(message_id)
-                results["skipped"] += 1
-                log_run(sender_email, subject, "skipped", "no attachments")
+                results["processed"] += 1
+                log_run(sender_email, subject, "replied", "Notice sent: no attachments detected")
                 continue
 
             extracted_records = []
@@ -473,6 +491,7 @@ def run_once() -> dict:
         results["errors"].append(str(e))
 
     return results
+
 
 
 if __name__ == "__main__":
