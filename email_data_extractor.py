@@ -354,11 +354,12 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
 
 
     brevo_api_key = os.environ.get("BREVO_API_KEY")
+    log.info(f"send_reply triggered for {to_addr}. BREVO_API_KEY present: {bool(brevo_api_key)}")
     if brevo_api_key:
-        import urllib.request
+        import urllib.request, urllib.error, ssl
         try:
             req_data = json.dumps({
-                "sender": {"email": email_user},
+                "sender": {"name": "HDFC Extractor", "email": email_user},
                 "to": [{"email": to_addr}],
                 "subject": "Re: " + subject,
                 "textContent": body,
@@ -372,15 +373,23 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
                 data=req_data,
                 headers={
                     "api-key": brevo_api_key,
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0"
                 },
                 method="POST"
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
                 log.info(f"Replied via Brevo API to {to_addr} | subject: {subject}")
                 return
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='ignore')
+            log.error(f"Brevo API HTTP {e.code} Error: {err_body}")
         except Exception as e:
-            log.warning(f"Brevo API send failed: {e} — falling back...")
+            log.error(f"Brevo API send failed: {e}")
+
 
 
     reply = MIMEText(body)
