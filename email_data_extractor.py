@@ -315,8 +315,9 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
     body = "\n".join(body_lines)
 
     resend_api_key = os.environ.get("RESEND_API_KEY")
+    log.info(f"send_reply triggered for {to_addr}. RESEND_API_KEY present: {bool(resend_api_key)}")
     if resend_api_key:
-        import urllib.request, urllib.error
+        import urllib.request, urllib.error, ssl
         from_sender = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
         try:
             req_data = json.dumps({
@@ -338,7 +339,10 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
                 },
                 method="POST"
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
                 log.info(f"Replied via Resend API ({from_sender}) to {to_addr} | subject: {subject}")
                 return
         except urllib.error.HTTPError as e:
@@ -346,6 +350,7 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
             log.error(f"Resend API HTTP {e.code} Error: {err_body}")
         except Exception as e:
             log.error(f"Resend API failed: {e}")
+
 
 
     brevo_api_key = os.environ.get("BREVO_API_KEY")
