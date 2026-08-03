@@ -30,8 +30,16 @@ from email.mime.text import MIMEText
 from email.header import decode_header
 
 import pdfplumber
+import socket
+
+# Force IPv4 resolution to prevent [Errno 101] Network is unreachable on cloud environments (Render)
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = _ipv4_getaddrinfo
 
 try:
+
     import pytesseract
     from pdf2image import convert_from_bytes
     from PIL import Image
