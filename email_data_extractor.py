@@ -317,15 +317,15 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
 
     import time, ssl
     last_err = None
-    # Try port 587 STARTTLS first, then 465 SSL as fallback, with retries
-    attempts = [(587, False), (465, True), (587, False)]
+    # Try port 465 SSL first (fastest on Render), then 587 STARTTLS as fallback
+    attempts = [(465, True), (587, False), (465, True)]
     for port, use_ssl in attempts:
         try:
             if use_ssl:
                 ctx = ssl.create_default_context()
-                conn = smtplib.SMTP_SSL(smtp_host, port, context=ctx, timeout=30)
+                conn = smtplib.SMTP_SSL(smtp_host, port, context=ctx, timeout=15)
             else:
-                conn = smtplib.SMTP(smtp_host, port, timeout=30)
+                conn = smtplib.SMTP(smtp_host, port, timeout=15)
                 conn.ehlo()
                 conn.starttls()
                 conn.ehlo()
@@ -337,8 +337,9 @@ def send_reply(to_addr: str, subject: str, original_message_id: str, extracted_r
         except Exception as e:
             last_err = e
             log.warning(f"SMTP attempt port {port} failed: {e} — retrying...")
-            time.sleep(3)
+            time.sleep(1)
     raise RuntimeError(f"All SMTP attempts failed: {last_err}")
+
 
 
 
