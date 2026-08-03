@@ -43,11 +43,12 @@ try:
     from pdf2image import convert_from_bytes
     from PIL import Image
     import shutil
+    import bin_ocr
     OCR_AVAILABLE = True
-    t_cmd = shutil.which("tesseract") or "/usr/bin/tesseract"
-    if os.path.exists(t_cmd):
+    t_cmd = bin_ocr.setup_ocr()
+    if t_cmd and os.path.exists(t_cmd):
         pytesseract.pytesseract.tesseract_cmd = t_cmd
-except ImportError:
+except Exception as e:
     OCR_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
